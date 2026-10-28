@@ -1382,14 +1382,18 @@ fn metadata_only_protocol_envelope(
 }
 
 /// An invalid marker also strips shell commands, which it cannot prove miss
-/// every ignored path; an active policy strips one whose words use brace
-/// expansion or a bracket class. Either policy strips a tool that reads back
-/// an earlier command's output, whose family is unknown. A stripped shell or
-/// output-reader body carries no paths and an extracted command.
+/// every ignored path, and search/list calls, whose matches it cannot prove
+/// either; an active policy strips a shell whose words use brace expansion or
+/// a bracket class. Either policy strips a tool that reads back an earlier
+/// command's output, whose family is unknown. A stripped search/list, shell or
+/// output-reader body carries no paths and an extracted record.
 const fn metadata_protocol_is_legal(protocol: &CaptureProtocol) -> bool {
     match (protocol.policy_state(), protocol.tool_family()) {
         (PolicyState::Active | PolicyState::Invalid, ToolFamily::File) => true,
-        (PolicyState::Active | PolicyState::Invalid, ToolFamily::NonFile | ToolFamily::Unknown) => {
+        (
+            PolicyState::Active | PolicyState::Invalid,
+            ToolFamily::SearchList | ToolFamily::NonFile | ToolFamily::Unknown,
+        ) => {
             protocol.path_count() == 0
                 && matches!(protocol.extraction_state(), ExtractionState::Extracted)
         }
@@ -21893,6 +21897,97 @@ pub(crate) mod tests {
         let env = inspect_capture_envelope(env).unwrap();
         assert!(!env.raw.to_string().contains("SENTINEL_SECRET"));
         assert!(env.raw.get("extra").is_none());
+    }
+
+    /// A search/list call whose locations the client could not prove (an
+    /// invalid policy state) is stripped to metadata-only, so its rebuilt body
+    /// is legal like a shell's: no paths, an extracted record.
+    #[test]
+    fn capture_protocol_metadata_only_search_list_under_invalid_policy_is_rebuilt() {
+        let env = HookEnvelope::from_query_and_body(
+            HookQuery {
+                event: "post-tool-use".into(),
+                agent: Some("omp".into()),
+                ..Default::default()
+            },
+            serde_json::json!({
+                "session_id": "search-metadata", "tool_family": "search-list",
+                "tool_name": "search-list", "tool_call_id": "call_1",
+                "_ai_memory_capture": capture_protocol("metadata-only", "invalid", "search-list", 0, "extracted"),
+            }),
+        );
+        let env = inspect_capture_envelope(env)
+            .expect("a canonical metadata-only search-list body is not a terminal drop");
+        assert_eq!(env.raw["tool_family"], "search-list");
+        assert_eq!(env.raw["tool_name"], "search-list");
+        assert_eq!(env.raw["tool_call_id"], "call_1");
+        assert_eq!(
+            env.body_excerpt.as_deref(),
+            Some("tool_family: search-list\ntool_call_id: call_1\noutcome: unknown")
+        );
+    }
+
+    /// Adversarial: admitting a search/list metadata claim must not admit a
+    /// shape the client never emits, or a path-count/noncanonical claim could
+    /// smuggle a stripped search body through.
+    #[test]
+    fn capture_protocol_search_list_metadata_claim_must_be_canonical() {
+        let admit = |protocol: serde_json::Value, overrides: serde_json::Value| {
+            let mut body = serde_json::json!({
+                "session_id": "search-claim",
+                "tool_family": "search-list",
+                "tool_name": "search-list",
+                "_ai_memory_capture": protocol,
+            });
+            body.as_object_mut()
+                .unwrap()
+                .extend(overrides.as_object().cloned().unwrap_or_default());
+            inspect_capture_envelope(HookEnvelope::from_query_and_body(
+                HookQuery {
+                    event: "post-tool-use".into(),
+                    agent: Some("omp".into()),
+                    ..Default::default()
+                },
+                body,
+            ))
+            .is_some()
+        };
+        assert!(admit(
+            capture_protocol("metadata-only", "invalid", "search-list", 0, "extracted"),
+            serde_json::json!({}),
+        ));
+        assert!(!admit(
+            capture_protocol("metadata-only", "invalid", "search-list", 1, "extracted"),
+            serde_json::json!({}),
+        ));
+        assert!(!admit(
+            capture_protocol(
+                "metadata-only",
+                "invalid",
+                "search-list",
+                0,
+                "missing-or-malformed"
+            ),
+            serde_json::json!({}),
+        ));
+        assert!(!admit(
+            capture_protocol(
+                "metadata-only",
+                "invalid",
+                "search-list",
+                0,
+                "not-applicable"
+            ),
+            serde_json::json!({}),
+        ));
+        assert!(!admit(
+            capture_protocol("metadata-only", "invalid", "search-list", 0, "extracted"),
+            serde_json::json!({ "tool_family": "file" }),
+        ));
+        assert!(!admit(
+            capture_protocol("metadata-only", "invalid", "search-list", 0, "extracted"),
+            serde_json::json!({ "tool_name": "file" }),
+        ));
     }
 
     #[test]

@@ -11,6 +11,18 @@ version in [`docs/changelog/`](docs/changelog/):
 
 ## [Unreleased]
 
+### Fixed
+
+- A search/list tool call the capture policy cannot prove — an invalid
+  `.ai-memory.toml` marker, a location outside the checkout, or a lookup past
+  the marker budget — is stored as its metadata-only observation instead of
+  being silently discarded. The client strips such a call to the canonical
+  metadata-only body, but the server's legality gate admitted only file,
+  shell, non-file and unknown families, so the whole event was acknowledged as
+  a terminal `dropped_policy` drop: invisible on live capture, and a wedged
+  session import for `ai-memory backfill`, which refuses to record a session
+  whose items were not stored.
+
 ## [3.2.9] - 2026-10-27
 
 ### Fixed

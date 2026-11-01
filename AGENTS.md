@@ -137,6 +137,11 @@ Both are idempotent: re-runs replace the block delimited by the ai-memory
 start/end HTML-comment markers, without disturbing the rest of the file.
 <!-- ai-memory:end -->
 
+## Related memory projects
+
+For AI server topics (embedding models, model endpoints, serving), query memory
+with `scopes: ["ai-server"]`. The embedding options page lives in that project.
+
 # AGENTS.md — ai-memory contributor guide
 
 This file is the single canonical instruction file for AI coding agents

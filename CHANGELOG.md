@@ -13,6 +13,14 @@ version in [`docs/changelog/`](docs/changelog/):
 
 ### Fixed
 
+- `ai-memory backfill` now skips any selected session the server already holds
+  instead of replaying it. A session captured live (even partly) was re-posted
+  event by event, and once the harness rewrote one of its own records the
+  replayed body no longer matched the stored ingest key, so the whole session
+  aborted with `dropped_collision` — "hook item N was not durably stored" — on
+  every `--force` run, with the earlier replay's events left duplicated next to
+  the captured ones. The probe is exact-id, includes ended sessions, and fails
+  open: a server without the route still imports as before.
 - A search/list tool call the capture policy cannot prove — an invalid
   `.ai-memory.toml` marker, a location outside the checkout, or a lookup past
   the marker budget — is stored as its metadata-only observation instead of

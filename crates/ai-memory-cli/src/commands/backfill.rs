@@ -29,7 +29,9 @@
 //! Safety: the automatic path only ever bootstraps an **empty** project (never
 //! overwrites an established one — hook capture from install-time forward and
 //! backfill of before-install history do not overlap), and it runs at most once
-//! per checkout (a local sentinel).
+//! per checkout (a local sentinel). A selected session the server already holds
+//! is skipped rather than replayed, so a manual `--force` re-run cannot duplicate
+//! live capture or collide with a transcript its harness has since rewritten.
 
 use std::path::Path;
 use std::path::PathBuf;
@@ -91,6 +93,9 @@ struct BackfillReport {
     imported_events: usize,
     /// Sessions skipped because the total-events circuit breaker tripped.
     skipped_for_cap: usize,
+    /// Sessions the server already held, so replaying their transcript would
+    /// only duplicate live capture.
+    skipped_already_captured: usize,
     /// Per-session failures (import errors); the run continues past them.
     failed_sessions: usize,
     /// True when the store was already populated (or `--force` off) and nothing
@@ -108,6 +113,20 @@ struct BackfillReport {
 #[derive(Debug, Deserialize)]
 struct ByAgentResponse {
     by_agent: Vec<AgentCount>,
+}
+
+/// The captured side: `GET /admin/open-sessions` for one exact id (subset we
+/// act on). Non-empty means the server already holds that session, live
+/// captured or imported — replaying its transcript would duplicate it.
+#[derive(Debug, Deserialize)]
+struct OpenSessionsResponse {
+    #[serde(default)]
+    sessions: Vec<OpenSessionEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenSessionEntry {
+    session_id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -442,6 +461,15 @@ async fn run_in(config: &Config, args: crate::cli::BackfillArgs, cwd: PathBuf) -
         let session_dir = cached_session_dir(&mut session_dirs, session.harness, || {
             import_session_dir(&home, &cwd, session.harness)
         });
+        // Capture already owns this session (it ran while hooks were installed
+        // — fully, or from install time onward). A transcript replay would
+        // duplicate what capture stored, and once the harness rewrites its own
+        // records the replayed bodies no longer match the stored ingest keys,
+        // which turns the whole run into a `dropped_collision` failure.
+        if session_already_captured(&endpoint, &workspace, &project, &session).await {
+            report.skipped_already_captured += 1;
+            continue;
+        }
         match import_one_with_session_dir(
             &endpoint,
             &workspace,
@@ -484,6 +512,41 @@ async fn run_in(config: &Config, args: crate::cli::BackfillArgs, cwd: PathBuf) -
         );
     }
     Ok(())
+}
+
+/// Whether the server already holds this session (live capture, an earlier
+/// import, or both). The probe is exact-id and includes ended sessions, so a
+/// closed session still answers. A probe failure — an older server without the
+/// route, a timeout — reads as "not captured" and the import proceeds exactly
+/// as before, keeping the collision guard as the backstop.
+async fn session_already_captured(
+    endpoint: &ServerEndpoint,
+    workspace: &str,
+    project: &str,
+    session: &SessionRef,
+) -> bool {
+    let agent = session.harness.agent_kind().as_str();
+    get_json::<OpenSessionsResponse>(
+        endpoint,
+        "/admin/open-sessions",
+        &[
+            ("workspace", workspace),
+            ("project", project),
+            ("agent", agent),
+            ("session_id", &session.native_session_id),
+            ("include_ended", "true"),
+            ("all_owners", "true"),
+        ],
+    )
+    .await
+    .map(|response| {
+        response.sessions.iter().any(|entry| {
+            entry
+                .session_id
+                .eq_ignore_ascii_case(&session.native_session_id)
+        })
+    })
+    .unwrap_or(false)
 }
 
 /// Sum the server's per-agent session counts for this scope; zero means empty.
@@ -1382,6 +1445,13 @@ fn finish(args: &crate::cli::BackfillArgs, report: &BackfillReport) -> Result<()
         return Ok(());
     }
     if report.imported_sessions == 0 && report.failed_sessions == 0 {
+        if report.skipped_already_captured > 0 {
+            println!(
+                "ai-memory: all {} selected session(s) of {}/{} are already on the server — nothing to import.",
+                report.skipped_already_captured, report.workspace, report.project
+            );
+            return Ok(());
+        }
         println!(
             "ai-memory: no local session history found to backfill for {}/{}.",
             report.workspace, report.project
@@ -1394,6 +1464,12 @@ fn finish(args: &crate::cli::BackfillArgs, report: &BackfillReport) -> Result<()
     );
     if report.failed_sessions > 0 {
         line.push_str(&format!(" {} session(s) failed.", report.failed_sessions));
+    }
+    if report.skipped_already_captured > 0 {
+        line.push_str(&format!(
+            " {} session(s) already captured skipped.",
+            report.skipped_already_captured
+        ));
     }
     if report.skipped_for_cap > 0 {
         line.push_str(&format!(
@@ -1435,6 +1511,73 @@ mod tests {
             vec!["new", "mid"],
             "newest first, capped to 2"
         );
+    }
+
+    /// The capture probe asks by exact id, ended sessions included and across
+    /// owners; a miss, an empty answer and a server without the route all read
+    /// as "not captured", so the import never loses history to a transient
+    /// probe failure.
+    #[tokio::test]
+    async fn the_capture_probe_asks_by_exact_id_and_fails_open() {
+        use axum::{Router, extract::Request, routing::get};
+        use std::sync::{Arc, Mutex};
+
+        let seen = Arc::new(Mutex::new(Vec::<String>::new()));
+        let recorded = seen.clone();
+        let captured = Arc::new(Mutex::new(true));
+        let answer = captured.clone();
+        let app = Router::new().route(
+            "/admin/open-sessions",
+            get(move |request: Request| {
+                let recorded = recorded.clone();
+                let answer = answer.clone();
+                async move {
+                    recorded.lock().unwrap().push(request.uri().to_string());
+                    if *answer.lock().unwrap() {
+                        axum::Json(serde_json::json!({
+                            "sessions": [{ "session_id": "sid", "cwd": "/repo" }],
+                        }))
+                    } else {
+                        axum::Json(serde_json::json!({ "sessions": [] }))
+                    }
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let endpoint = ServerEndpoint::for_hook_target(format!("http://{address}"), None);
+        let wanted = session("sid", 1);
+
+        assert!(session_already_captured(&endpoint, "ws", "proj", &wanted).await);
+        let query = seen.lock().unwrap()[0].clone();
+        for part in [
+            "session_id=sid",
+            "include_ended=true",
+            "all_owners=true",
+            "agent=claude-code",
+            "workspace=ws",
+            "project=proj",
+        ] {
+            assert!(query.contains(part), "{part} missing from {query}");
+        }
+
+        *captured.lock().unwrap() = false;
+        assert!(
+            !session_already_captured(&endpoint, "ws", "proj", &wanted).await,
+            "an empty answer is not a capture"
+        );
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let bare = tokio::spawn(async move { axum::serve(listener, Router::new()).await.unwrap() });
+        let endpoint = ServerEndpoint::for_hook_target(format!("http://{address}"), None);
+        assert!(
+            !session_already_captured(&endpoint, "ws", "proj", &wanted).await,
+            "a server without the route must not block the import"
+        );
+        server.abort();
+        bare.abort();
     }
 
     #[test]

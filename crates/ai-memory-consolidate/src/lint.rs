@@ -942,9 +942,10 @@ mod tests {
     }
 
     #[test]
-    fn lint_prompt_mirrors_wiki_language_but_keeps_enums() {
+    fn lint_prompt_requires_english_messages_but_keeps_enums() {
         assert!(LINT_SYSTEM_PROMPT.contains("## OUTPUT LANGUAGE"));
-        assert!(LINT_SYSTEM_PROMPT.contains("dominant natural language of\nthe page previews"));
+        assert!(LINT_SYSTEM_PROMPT.contains("message` in ENGLISH"));
+        assert!(!LINT_SYSTEM_PROMPT.contains("dominant natural language"));
         assert!(LINT_SYSTEM_PROMPT.contains("`kind`, `severity`, and JSON keys stay"));
     }
 

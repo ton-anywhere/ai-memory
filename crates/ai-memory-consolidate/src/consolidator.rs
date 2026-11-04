@@ -3574,15 +3574,20 @@ mod tests {
     }
 
     #[test]
-    fn consolidation_system_prompts_require_graph_links_and_input_language() {
+    fn consolidation_system_prompts_require_graph_links_and_english_output() {
         for (name, prompt) in [("single", SYSTEM_PROMPT), ("batch", BATCH_SYSTEM_PROMPT)] {
             assert!(prompt.contains("## WIKILINKS"), "{name} prompt");
             assert!(prompt.contains("## OUTPUT LANGUAGE"), "{name} prompt");
             assert!(prompt.contains("[[project:page-path]]"), "{name} prompt");
             assert!(prompt.contains("[[_global:page-path]]"), "{name} prompt");
+            assert!(prompt.contains("prose in ENGLISH"), "{name} prompt");
             assert!(
-                prompt.contains("dominant natural language of the input"),
-                "{name} prompt"
+                !prompt.contains("dominant natural language"),
+                "{name} prompt must not mirror the input language"
+            );
+            assert!(
+                prompt.contains("verbatim in their original form"),
+                "{name} prompt must keep code, paths, and quotes verbatim"
             );
             assert!(
                 prompt.contains("JSON keys stay in English"),

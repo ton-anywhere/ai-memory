@@ -2467,7 +2467,7 @@ Every proposal must include bounded evidence quotes, confidence, rationale, and 
 
 ## OUTPUT LANGUAGE
 
-Write page titles, markdown prose, patch content, and rationale in the dominant natural language of the input (if the user works in Portuguese, write Portuguese — do not translate their vocabulary into English). English instructions and an English schema do not make English the output language. Keep code, identifiers, file paths, shell commands, error strings, patch anchors, and evidence quotes verbatim in their original form. JSON keys, enum values, and paths stay as the schema requires."#;
+Write page titles, markdown prose, patch content, and rationale in ENGLISH, whatever language the input uses — do not mirror it. Translate the prose only: keep code, identifiers, file paths, shell commands, error strings, patch anchors, and evidence quotes verbatim in their original form. An English instruction and an English schema are the contract, so every proposal reads in English. JSON keys, enum values, and paths stay as the schema requires."#;
 
 #[cfg(test)]
 mod tests {
@@ -2545,10 +2545,10 @@ mod tests {
     }
 
     #[test]
-    fn auto_improve_prompt_mirrors_input_language() {
+    fn auto_improve_prompt_requires_english_output() {
         assert!(AUTO_IMPROVE_SYSTEM_PROMPT.contains("## OUTPUT LANGUAGE"));
-        assert!(AUTO_IMPROVE_SYSTEM_PROMPT.contains("dominant natural language of the input"));
-        assert!(AUTO_IMPROVE_SYSTEM_PROMPT.contains("do not make English the output language"));
+        assert!(AUTO_IMPROVE_SYSTEM_PROMPT.contains("rationale in ENGLISH"));
+        assert!(!AUTO_IMPROVE_SYSTEM_PROMPT.contains("dominant natural language"));
         // A translated quote no longer matches what the session said, and a
         // translated patch anchor no longer finds its heading.
         assert!(AUTO_IMPROVE_SYSTEM_PROMPT.contains("patch anchors, and evidence quotes verbatim"));

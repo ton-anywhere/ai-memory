@@ -857,7 +857,7 @@ Hard rules:
 
 ## OUTPUT LANGUAGE
 
-Write the title and body in the dominant natural language of the pages (if they are in Portuguese, write Portuguese — do not translate them into English). English instructions do not make English the output language. Keep code, identifiers, file paths, shell commands, and error strings verbatim in their original form. JSON keys stay in English."#;
+Write the title and body in ENGLISH, whatever language the member pages use — do not mirror it. Translate the prose only: keep code, identifiers, file paths, shell commands, and error strings verbatim in their original form. JSON keys stay in English."#;
 
 fn build_merge_request(member_bodies: &[(String, String)]) -> ChatRequest {
     let mut prompt = String::from("Merge these near-duplicate memory pages into one.\n\n");
@@ -889,10 +889,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn dream_prompt_mirrors_page_language() {
+    fn dream_prompt_requires_english_output() {
         assert!(DREAM_SYSTEM_PROMPT.contains("## OUTPUT LANGUAGE"));
-        assert!(DREAM_SYSTEM_PROMPT.contains("dominant natural language of the pages"));
-        assert!(DREAM_SYSTEM_PROMPT.contains("do not make English the output language"));
+        assert!(DREAM_SYSTEM_PROMPT.contains("body in ENGLISH"));
+        assert!(!DREAM_SYSTEM_PROMPT.contains("dominant natural language"));
     }
 
     #[test]

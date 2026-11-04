@@ -289,7 +289,7 @@ Reject anything supported by a single session — the per-session reviewer owns 
 
 ## OUTPUT LANGUAGE
 
-Write page titles, markdown prose, patch content, and rationale in the dominant natural language of the session summaries (if the user works in Portuguese, write Portuguese — do not translate their vocabulary into English). English instructions and an English schema do not make English the output language. Keep code, identifiers, file paths, shell commands, error strings, patch anchors, and evidence quotes verbatim in their original form. JSON keys, enum values, and paths stay as the schema requires."#;
+Write page titles, markdown prose, patch content, and rationale in ENGLISH, whatever language the session summaries use — do not mirror it. Translate the prose only: keep code, identifiers, file paths, shell commands, error strings, patch anchors, and evidence quotes verbatim in their original form. An English instruction and an English schema are the contract, so every proposal reads in English. JSON keys, enum values, and paths stay as the schema requires."#;
 
 #[cfg(test)]
 mod tests {
@@ -307,12 +307,10 @@ mod tests {
     }
 
     #[test]
-    fn experience_prompt_mirrors_input_language() {
+    fn experience_prompt_requires_english_output() {
         assert!(EXPERIENCE_SYSTEM_PROMPT.contains("## OUTPUT LANGUAGE"));
-        assert!(
-            EXPERIENCE_SYSTEM_PROMPT.contains("dominant natural language of the session summaries")
-        );
-        assert!(EXPERIENCE_SYSTEM_PROMPT.contains("do not make English the output language"));
+        assert!(EXPERIENCE_SYSTEM_PROMPT.contains("rationale in ENGLISH"));
+        assert!(!EXPERIENCE_SYSTEM_PROMPT.contains("dominant natural language"));
         assert!(EXPERIENCE_SYSTEM_PROMPT.contains("evidence quotes verbatim"));
     }
 

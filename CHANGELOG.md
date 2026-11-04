@@ -1846,6 +1846,19 @@ version in [`docs/changelog/`](docs/changelog/):
   not while typing. An existing saved token keeps working with the server it was
   already configured for. (GHSA-fqfw-62f9-3jhw)
 
+### Changed
+
+- Every LLM pass that writes wiki prose now writes it in English regardless of
+  the session's language. The `## OUTPUT LANGUAGE` rule in the single-page,
+  batch, bootstrap, auto-improvement, experience, dream, and lint prompts asks
+  for English titles, bodies, summaries, rationales, patch content, and finding
+  messages; code, identifiers, paths, commands, error strings, patch anchors,
+  evidence quotes, and quoted operator instructions stay verbatim. Sessions in
+  Portuguese (or any other language) still consolidate normally, so durable
+  memory is uniform across projects and teams. Pages already written are not
+  retranslated, and prompts with no language rule — profile classify/merge and
+  query answering — are unchanged.
+
 ### Fixed
 
 - Approving an auto-improvement proposal that conflicts with a newer version of

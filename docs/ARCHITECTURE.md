@@ -148,7 +148,9 @@ from hook paths.
 4. When `AI_MEMORY_LLM_PROVIDER` is set, `memory_consolidate` rewrites
    that summary into a richer durable page or fans out into a
    multi-page batch under `concepts/`, `decisions/`, `gotchas/`. Consolidation
-   prompts preserve the source material's dominant natural language and ask
+   prompts write every title and body in English whatever language the
+   observations use, while keeping code, identifiers, paths, commands, error
+   strings, and quoted operator instructions verbatim, and ask
    the model to connect related pages with path-based wikilinks. The default
    single-page and batch prompts lead the user content with their stable
    blocks (the fixed batch text, meaning header + field schema, and the
@@ -176,7 +178,8 @@ from hook paths.
    rejected candidates/rejection-buffer entries rather than wiki writes. Like
    the consolidation prompts, the per-session reviewer, the cross-session
    experience pass, the dream merge and the lint contradiction pass write
-   prose in the dominant natural language of their input.
+   prose in English regardless of the input language, keeping code, paths,
+   patch anchors, and evidence quotes verbatim.
    Every LLM prompt treats repository text, observations, wiki pages, and prior
    proposals as untrusted data rather than instructions. The same explicit
    trust boundary and delimiters precede automatically injected handoffs,

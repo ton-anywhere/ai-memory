@@ -85,11 +85,11 @@ history only when useful, but must not be presented as current fact.
 ## OUTPUT LANGUAGE
 
 Write ALL page titles (including the sessions/ page) and all body
-prose in the dominant natural language of the input (if the user
-works in Portuguese, write Portuguese — do not translate their
-vocabulary into English). Keep code, identifiers, file paths,
-shell commands, and error strings verbatim in their original
-form. JSON keys stay in English.
+prose in ENGLISH, whatever language the observations or the current
+page body use — do not mirror the input language. Translate the
+prose only: keep code, identifiers, file paths, shell commands,
+error strings, wikilink targets, and quoted operator instructions
+verbatim in their original form. JSON keys stay in English.
 
 ## Required JSON shape
 

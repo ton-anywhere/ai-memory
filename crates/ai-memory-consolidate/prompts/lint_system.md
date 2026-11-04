@@ -48,11 +48,11 @@ outcome — they prove the wiki is internally consistent.
 
 ## OUTPUT LANGUAGE
 
-Write each finding's `message` in the dominant natural language of
-the page previews (if the wiki is in Portuguese, write Portuguese).
-English instructions do not make English the output language.
-Page paths, `kind`, `severity`, and JSON keys stay exactly as
-specified below.
+Write each finding's `message` in ENGLISH, whatever language the
+page previews use — do not mirror their language. Translate the
+prose only: keep code, identifiers, file paths, and error strings
+verbatim. Page paths, `kind`, `severity`, and JSON keys stay
+exactly as specified below.
 
 ## Required JSON shape
 

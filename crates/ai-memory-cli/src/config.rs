@@ -713,6 +713,9 @@ pub struct Config {
     /// Session-start handoff delivery (design: #959). Default keeps today's
     /// automatic-claim behavior unchanged.
     pub handoff: HandoffSettings,
+    /// Session-start unfinished-session recovery delivery. Default keeps
+    /// today's automatic delivery unchanged.
+    pub recovery: RecoverySettings,
     /// `[profile]` — the cross-project profile: how this user usually works,
     /// delivered to every project as defaults below the repository's rules
     /// file (`docs/design-cross-project-profile.md`,
@@ -1632,6 +1635,7 @@ impl Default for Config {
             query_answer: QueryAnswerSettings::default(),
             auto_improve: AutoImproveSettings::default(),
             handoff: HandoffSettings::default(),
+            recovery: RecoverySettings::default(),
             profile: ai_memory_core::profile::ProfileSettings::default(),
             sanitize: ai_memory_core::SanitizeConfig::default(),
             auth: AuthSettings::default(),
@@ -1832,6 +1836,17 @@ pub struct HandoffSettings {
     /// Server-wide: applies to every operator on this server. A per-project
     /// override is intentionally left for a follow-up change.
     pub claim_on_session_start: bool,
+    /// When `true` (default — unchanged behavior), a session-start fetch
+    /// delivers and claims a pending handoff.
+    ///
+    /// When `false`, the server delivers no handoff and posts no continuity
+    /// notice for a request that does not name `handoff`. The baton stays
+    /// open for `memory_handoff_accept`. A project's `.ai-memory.toml`
+    /// `[handoff] deliver_on_session_start` still overrides the server default
+    /// in either direction: an explicit `true` opts that project back in.
+    ///
+    /// Server-wide: applies to every operator on this server.
+    pub deliver_on_session_start: bool,
     /// When `true` (default — unchanged behavior), ending an unmanaged session
     /// creates an automatic open handoff for the next session.
     ///
@@ -1848,7 +1863,32 @@ impl Default for HandoffSettings {
     fn default() -> Self {
         Self {
             claim_on_session_start: true,
+            deliver_on_session_start: true,
             create_on_session_end: true,
+        }
+    }
+}
+
+/// `[recovery]` unfinished-session recovery delivery settings.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RecoverySettings {
+    /// When `true` (default — unchanged behavior), a session start renders the
+    /// bounded unfinished-session recovery snapshot and its backfill marker.
+    ///
+    /// When `false`, the server skips that snapshot for a request that does
+    /// not name `recovery`. The source session stays open and every other
+    /// startup block — handoffs, managed context, the brief, the profile
+    /// digest, the inbox notice — is delivered as usual. A project's
+    /// `.ai-memory.toml` `[recovery] deliver_on_session_start` still overrides
+    /// the server default in either direction.
+    pub deliver_on_session_start: bool,
+}
+
+impl Default for RecoverySettings {
+    fn default() -> Self {
+        Self {
+            deliver_on_session_start: true,
         }
     }
 }
@@ -6701,7 +6741,11 @@ input_token_safety_margin = {margin}
 
             [handoff]
             claim_on_session_start = false
+            deliver_on_session_start = false
             create_on_session_end = false
+
+            [recovery]
+            deliver_on_session_start = false
 
             [maintenance]
             enabled = false
@@ -6760,7 +6804,9 @@ input_token_safety_margin = {margin}
         assert_eq!(cfg.contradiction_band_max, 0.8);
         assert!(cfg.auth.secure_cookie);
         assert!(!cfg.handoff.claim_on_session_start);
+        assert!(!cfg.handoff.deliver_on_session_start);
         assert!(!cfg.handoff.create_on_session_end);
+        assert!(!cfg.recovery.deliver_on_session_start);
         assert!(!cfg.maintenance.enabled);
         assert_eq!(cfg.maintenance.lint_interval_secs, 3600);
         assert_eq!(cfg.maintenance.lint_llm_interval_secs, 604_800);
@@ -6903,6 +6949,13 @@ input_token_safety_margin = {margin}
     #[test]
     fn handoff_create_on_session_end_defaults_to_true() {
         assert!(Config::default().handoff.create_on_session_end);
+    }
+
+    #[test]
+    fn delivery_defaults_are_on() {
+        let cfg = Config::default();
+        assert!(cfg.handoff.deliver_on_session_start);
+        assert!(cfg.recovery.deliver_on_session_start);
     }
 
     #[test]
